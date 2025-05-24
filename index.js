@@ -1,11 +1,15 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
-const User = require('./User')
-const Wallet = require('./Wallet')
+const User = require('./models/User')
+const Wallet = require('./models/Wallet');
+const Transaction = require('./models/Transaction');
 const jwt = require('jsonwebtoken');
 dotenv.config();
 const bcrypt = require('bcryptjs');
+const {sendForgotPasswordEmail} = require('./sendMail');
+const { handleGetAllUsers, handleUserRegistration, handleUsertransaction } = require('./Controllers/app');
+const { validateRegister, authorization } = require('./middlewares/app');
 
 const app = express();
 
@@ -26,77 +30,7 @@ mongoose.connect(process.env.MONGODB_URL)
     })
 
     
-app.post('/sign-up', async (req, res)=>{
-    const {userName, email, password} = req.body;
-    console.log('incoming sign-up request:', req.body);
-    
-    try {
-
-   if(!email){
-         return res.status(400).json({message: 'Email is required'});
-   }
-
-    if(!password){
-            return res.status(400).json({message: 'Password is required'});
-    }
-
-    const existingUser = await User.findOne({email});
-    if(existingUser){
-        return res.status(400).json({message: 'User already exists'});
-    }
-    if(password.length < 6){
-        return res.status(400).json({message: 'Password must be at least 6 characters'});
-    }
-    const hashedPassword = await bcrypt.hash(password, 12);
-    console.log('hashed password:', hashedPassword);
-    
-    const newUser = new User({
-        userName,
-        email,
-        password: hashedPassword,
-        });
-        const savedUser = await newUser.save();
-
-        if(!savedUser || savedUser._id){
-            
-            
-            return res.status(400).json({message: 'User not created'});
-        }
-
-        const newWallet = new Wallet({
-            userId: savedUser._id,
-            balance: 0
-        });
-        const savedWallet = await newWallet.save();
-        console.log('saved wallet:', savedWallet._id);
-        
-
-       return res.status(201).json({
-            message: 'User and wallet created successfully',
-            user: { email: savedUser.email,
-                 userName: savedUser.userName,
-                 _id: savedUser._id 
-                },
-            wallet: savedWallet
-            
-        });
-        
-    } catch (error) {
-        console.error('Error creating user:', error);
-        if (error.code === 11000) {
-            return res.status(400).json({message: 'Duplicate key error',
-                details: error.keyValue
-            });
-        }
-        
-
-
-
-        res.status(500).json({message: error.message});
-    }
-
-    
-})
+app.post('/sign-up', validateRegister, handleUserRegistration );
 
 app.post('/login', async (req, res)=>{
         const {email, password} = req.body;
@@ -120,6 +54,13 @@ app.post('/login', async (req, res)=>{
          process.env.ACCESS_TOKEN, 
         {expiresIn: '1d'});
 
+        const refreshToken = jwt.sign(
+            {userId: newUser._id},
+            process.env.REFRESH_TOKEN, 
+            {expiresIn: '30d'});
+
+
+
     res.status(200).json({
         message: 'Login successful',
         newUser: {email: newUser?.email,
@@ -132,8 +73,57 @@ app.post('/login', async (req, res)=>{
     }
 })
 
+app.post('/forgot-password', async (req, res)=>{
+    const {email} = req.body;
+    const user = await User.findOne({email});
+    if(!user){
+     return res.status(400).json({message: 'User not found'});
+    }
+    const token = jwt.sign(
+        {userId: user._id},
+        process.env.ACCESS_TOKEN, 
+        {expiresIn: '5h'}
+    );
+
+    await sendForgotPasswordEmail(email, token);
+    // const resetLink = `http://www.careerex.com/reset-password/${token}`;
+
+    try{
+        await sendForgotPasswordEmail(email, token);
+        res.json({
+            message: 'Password reset link sent to your email',
+            user: {
+                email: user.email,
+                userName: user.userName
+        }
+    });
+}catch (error) {
+    console.error('Failed to send email:', error);
+    res.status(500).json({message: 'Failed to send email' })
+    
+ }
+        
+    
+
+});
+
+app.patch('/reset-password',authorization, async (req, res)=>{
+    const {password} = req.body;
+    const user = await User.findOne({email: req.user.email});
+    if(!user){
+     return res.status(400).json({message: 'User not found'});
+    }
+    const hashedPassword = await bcrypt.hash(password, 12);
+    user.password = hashedPassword;
+    await user.save();
+    res.json({
+        message: 'Password reset successfully'})
+});
 
 
+app.get('/all-users',authorization, handleGetAllUsers);
+
+app.post('/transfer',authorization, handleUsertransaction);
 
 
 //mongodb+srv://aishatmikailcareerex:<db_password>@cluster0.xz85yj4.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
