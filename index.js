@@ -27,7 +27,7 @@ mongoose.connect(process.env.MONGODB_URL)
         res.status(200).json({message: "Welcome to  My CareerEx Final Project API"});
     })
 
-app.use(routes);
+app.use("/api",routes);
 
 //mongodb+srv://aishatmikailcareerex:<db_password>@cluster0.xz85yj4.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
 //aishatmikailcareerex
