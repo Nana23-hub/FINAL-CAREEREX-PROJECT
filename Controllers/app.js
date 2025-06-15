@@ -3,6 +3,7 @@
  const Wallet = require('../models/Wallet');
 const Transaction = require('../models/Transaction');
 const {validEmail} = require('../sendMail');
+const jwt = require('jsonwebtoken');
  
   const {findUserService} = require('../services/app');
 
@@ -159,8 +160,131 @@ const handleUsertransaction = async (req, res)=>{
   }
     
 }
+const handleLogin = async (req, res)=>{
+        const {email, password} = req.body;
+        try {
+        const newUser = await User.findOne({email});
+        if(!newUser){
+            return res.status(400).json({message: 'User not found'});
+        }
+    const isMatch = await bcrypt.compare(password, newUser?.password);
+    console.log(newUser?.password);
+    
+    if(!isMatch){
+        return res.status(400).json({message: 'Incorrect email or password'});
+    }
+    // if(!newUser.verified){
+    //     return res.status(400).json({message: 'User not verified'});
+    // }
 
+    const accessToken = jwt.sign(
+         {userId: newUser._id},
+         process.env.ACCESS_TOKEN, 
+        {expiresIn: '1d'});
+
+        const refreshToken = jwt.sign(
+            {userId: newUser._id},
+            process.env.REFRESH_TOKEN, 
+            {expiresIn: '30d'});
+
+
+
+    res.status(200).json({
+        message: 'Login successful',
+        newUser: {email: newUser?.email,
+             userName: newUser?.userName},
+        accessToken
+    });
+    }
+    catch (error) {
+        res.status(500).json({message: error.message});
+    }
+}
+
+const handleForgotPassword = async (req, res)=>{
+    const {email} = req.body;
+    const user = await User.findOne({email});
+    if(!user){
+     return res.status(400).json({message: 'User not found'});
+    }
+    const token = jwt.sign(
+        {userId: user._id},
+        process.env.ACCESS_TOKEN, 
+        {expiresIn: '5h'}
+    );
+
+    await sendForgotPasswordEmail(email, token);
+    // const resetLink = `http://www.careerex.com/reset-password/${token}`;
+
+    try{
+        await sendForgotPasswordEmail(email, token);
+        res.json({
+            message: 'Password reset link sent to your email',
+            user: {
+                email: user.email,
+                userName: user.userName
+        }
+    });
+}catch (error) {
+    console.error('Failed to send email:', error);
+    res.status(500).json({message: 'Failed to send email' })
+    
+ }
+        
+}
+const handleResetPassword = async (req, res)=>{
+    const {password} = req.body;
+    const user = await User.findOne({email: req.user.email});
+    if(!user){
+     return res.status(400).json({message: 'User not found'});
+    }
+    const hashedPassword = await bcrypt.hash(password, 12);
+    user.password = hashedPassword;
+    await user.save();
+    res.json({
+        message: 'Password reset successfully'})
+}
+
+const handleGetWalletBalance = async (req, res) => {
+    try{
+        const wallet = await Wallet.findOne({userId: req.user._id});
+        if (!wallet) 
+            return res.status(404).json({message: 'Wallet not found'});
+
+            res.json({
+                balance: wallet.balance
+            });
+        
+    }catch (error) {
+        console.error('Error fetching balance:', error);
+        res.status(500).json({message: 'Internal server error'});
+    }
+}
+
+const handlePastTransactions = async(req,res)=>{
+    try{
+        const wallet = await Wallet.findOne({userId: req.user.userId});
+        if (!wallet) 
+            return res.status(404).json({message: 'Wallet not found'});
+
+        const transactions = await Transaction.find({ walletId: wallet._id}).sort({ createdAt: -1 });
+        res.json({
+            transactions
+        });
+    } catch (error) {
+        console.error('Error fetching transactions:', error);
+        res.status(500).json({message: 'Internal server error'});
+    }
+    
+}
 
 module.exports = {
-    handleGetAllUsers, handleUserRegistration,handleUsertransaction
+    handleGetAllUsers,
+     handleUserRegistration,
+     handleUsertransaction,
+     handleLogin,
+     handleForgotPassword,
+    handleResetPassword,
+    handleGetWalletBalance,
+    handlePastTransactions
 }

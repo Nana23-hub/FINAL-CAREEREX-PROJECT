@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 dotenv.config();
 const bcrypt = require('bcryptjs');
 const {sendForgotPasswordEmail} = require('./sendMail');
-const { handleGetAllUsers, handleUserRegistration, handleUsertransaction } = require('./Controllers/app');
+const { handleGetAllUsers, handleUserRegistration, handleUsertransaction, handleForgotPassword, handleResetPassword, handleGetWalletBalance, handlePastTransactions, handleLogin } = require('./Controllers/app');
 const { validateRegister, authorization } = require('./middlewares/app');
 
 const app = express();
