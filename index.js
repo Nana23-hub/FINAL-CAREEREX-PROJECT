@@ -24,7 +24,7 @@ mongoose.connect(process.env.MONGODB_URL)
     });
 
     app.get("/", (req,res)=>{
-        res.status(200).json({message: "Welcome to  My CareerEx API"});
+        res.status(200).json({message: "Welcome to  My CareerEx Final Project API"});
     })
 
 app.use(routes);
