@@ -182,7 +182,7 @@ const handleLogin = async (req, res)=>{
          process.env.ACCESS_TOKEN, 
         {expiresIn: '1d'});
 
-        const refreshToken = jwt.sign(
+        const refresh_token = jwt.sign(
             {userId: newUser._id},
             process.env.REFRESH_TOKEN, 
             {expiresIn: '30d'});
@@ -263,11 +263,18 @@ const handleGetWalletBalance = async (req, res) => {
 
 const handlePastTransactions = async(req,res)=>{
     try{
-        const wallet = await Wallet.findOne({userId: req.user.userId});
+        const userId = req.user.userId;
+
+        const wallet = await Wallet.findOne({userId});
         if (!wallet) 
             return res.status(404).json({message: 'Wallet not found'});
 
-        const transactions = await Transaction.find({ walletId: wallet._id}).sort({ createdAt: -1 });
+        const transactions = await Transaction.find({ 
+            $or: [
+                { senderId: userId},
+                { recipientId: userId }
+            ]
+        }).sort({ createdAt: -1 });
         res.json({
             transactions
         });
